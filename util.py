@@ -75,8 +75,8 @@ class LassoSolver(object):
         should be directly passed as a Fortran-contiguous numpy array.
         """
 
-    def __init__(self, alpha=1.0, fit_intercept=True, max_iter=1000,
-                 step_size=0.01, tol=1e-4, method="PGD"):
+    def __init__(self, alpha=0.1, fit_intercept=True, max_iter=1000,
+                 step_size=0.01, tol=1e-5, method="PGD"):
         self.alpha = alpha
         self.fit_intercept = fit_intercept
         self.max_iter = max_iter
@@ -85,40 +85,49 @@ class LassoSolver(object):
         self.method = method
 
     def fit(self, x_mat, y):
+        def prox(vec, mu):
+            y = np.maximum(np.abs(vec) - mu, np.zeros((dim, 1)))
+            return np.sign(vec) * y
         if self.alpha == 0:
             warnings.warn("With alpha=0, this algorithm does not converge "
                           "well. You are advised to use the Linear Regression "
                           "estimator", stacklevel=2)
+
         n = x_mat.shape[0]
+        y = y.reshape(n, 1)
         dim = x_mat.shape[1]
         inverse_covariance_mat = x_mat.T @ x_mat
         alpha = self.step_size  # 固定步长
         p = self.alpha  # 正则化参数
         epsilon = self.tol  # 最大允许误差
-        x_k = np.zeros(dim)
-        x_k_old = np.zeros(dim)
+        x_k = np.zeros((dim, 1))
+        x_k_old = np.zeros((dim, 1))
 
         k = 1  # 迭代次数
         if self.method == "PGD":
             print("======= Method: PGD =======")
             while k < self.max_iter:
-                x_k_temp = x_k - alpha * x_mat.T @ (x_mat @ x_k - y)  # 对光滑部分做梯度下降
-
-                # 临近点投影（软阈值）
-                for i in range(dim):
-                    if x_k_temp[i] < -alpha * p:
-                        x_k[i] = x_k_temp[i] + alpha * p
-                    elif x_k_temp[i] > alpha * p:
-                        x_k[i] = x_k_temp[i] - alpha * p
-                    else:
-                        x_k[i] = 0
+                g = 1/n * x_mat.T.dot(x_mat.dot(x_k) - y)
+                # print(g)
+                x_k = prox(x_k_old - alpha * g, alpha * p)
+                # x_k_temp = x_k - alpha * x_mat.T.dot(x_mat.dot(x_k) - y)  # 对光滑部分做梯度下降
+                # # print(x_k_temp)
+                #
+                # # 临近点投影（软阈值）
+                # for i in range(dim):
+                #     if x_k_temp[i] < -alpha * p:
+                #         x_k[i] = x_k_temp[i] + alpha * p
+                #     elif x_k_temp[i] > alpha * p:
+                #         x_k[i] = x_k_temp[i] - alpha * p
+                #     else:
+                #         x_k[i] = 0
 
                 if np.linalg.norm(x_k - x_k_old) < epsilon:
                     break
                 else:
                     x_k_old = x_k.copy()  # 深拷贝
                     k += 1
-            x_optm = x_k[:]
+            x_optm = x_k
             print(k)
         elif self.method == "SubGD":
             print("======= Method: SubGD =======")
@@ -130,7 +139,7 @@ class LassoSolver(object):
                         l1_subgradient[i] = np.sign(x_k[i])
                     else:
                         l1_subgradient[i] = np.random.uniform(-1, 1)  # 随机取[-1, 1]内的值作为次梯度
-                subgradient = x_mat.T @ (x_mat @ x_k - y) + p * l1_subgradient
+                subgradient = 1/n * (x_mat.T.dot(x_mat.dot(x_k) - y) + p * l1_subgradient)
 
                 x_k = x_k - alpha * subgradient
                 if np.linalg.norm(x_k - x_k_old) < epsilon:
@@ -151,10 +160,6 @@ class LassoSolver(object):
                 else:
                     R = cholesky(np.eye(m) + 1. / rho * (X.dot(X.T)))
                 return R.T
-
-            def prox(vec, mu):
-                y = np.maximum(np.abs(vec) - mu, np.zeros((dim, 1)))
-                return np.sign(vec) * y
 
             z = np.zeros((dim, 1))
             x_old = np.zeros((dim, 1))
@@ -185,55 +190,7 @@ class LassoSolver(object):
                     k += 1
             x_optm = z
             print(k)
-
-            # rho = 1
-            # rel_par = 1
-            #
-            # # define functions
-            # def factor(X, rho):
-            #     m, n = X.shape
-            #     if m >= n:
-            #         L = cholesky(X.T.dot(X) + rho * sparse.eye(n))
-            #     else:
-            #         L = cholesky(sparse.eye(m) + 1. / rho * (X.dot(X.T)))
-            #     L = sparse.csc_matrix(L)
-            #     U = sparse.csc_matrix(L.T)
-            #     return L, U
-            #
-            # def shrinkage(x, kappa):
-            #     return np.maximum(0., x - kappa) - np.maximum(0., -x - kappa)
-            #
-            # # save a matrix-vector multiply
-            # Xty = x_mat.T.dot(y)
-            #
-            # # ADMM solver
-            # z_old = np.zeros((dim, 1))
-            # z = np.zeros((dim, 1))
-            # u = np.zeros((dim, 1))
-            #
-            # # cache the (Cholesky) factorization
-            # L, U = factor(x_mat, rho)
-            # while k < self.max_iter:
-            #     # x-update
-            #     q = Xty + rho * (z - u)  # (temporary value)
-            #     if n >= dim:
-            #         x = spsolve(U, spsolve(L, q))[..., np.newaxis][0]
-            #     else:
-            #         ULXq = spsolve(U, spsolve(L, x_mat.dot(q)))[..., np.newaxis]
-            #         x = (q * 1. / rho) - ((x_mat.T.dot(ULXq)) * 1. / (rho ** 2))
-            #     # z-update with relaxation
-            #     zold = np.copy(z)
-            #     x_hat = rel_par * x + (1. - rel_par) * zold
-            #     z = shrinkage(x_hat + u, alpha * 1. / rho)
-            #
-            #     # u-update
-            #     u += (x_hat - z)
-            #
-            #     if np.linalg.norm(z - zold) < epsilon:
-            #         break
-            #     k += 1
-            #
-            # x_optm = z.ravel()
+            print(x_optm)
 
         else:
             raise ValueError(
