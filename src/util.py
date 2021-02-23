@@ -112,22 +112,11 @@ class LassoSolver(object):
                 g = 1/n * x_mat.T.dot(x_mat.dot(x_k) - y)
                 # print(g)
                 x_k = prox(x_k_old - alpha * g, alpha * p)
-                # x_k_temp = x_k - alpha * x_mat.T.dot(x_mat.dot(x_k) - y)  # 对光滑部分做梯度下降
-                # # print(x_k_temp)
-                #
-                # # 临近点投影（软阈值）
-                # for i in range(dim):
-                #     if x_k_temp[i] < -alpha * p:
-                #         x_k[i] = x_k_temp[i] + alpha * p
-                #     elif x_k_temp[i] > alpha * p:
-                #         x_k[i] = x_k_temp[i] - alpha * p
-                #     else:
-                #         x_k[i] = 0
-
                 if np.linalg.norm(x_k - x_k_old) < epsilon:
                     break
                 else:
                     x_k_old = x_k.copy()  # 深拷贝
+                    print(x_k)
                     k += 1
             x_optm = x_k
         elif self.method == "SubGD":
