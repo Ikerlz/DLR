@@ -8,6 +8,8 @@ This is the Final Project of "Optimization Theory", created by [Zhe Li](lizhe.fu
 
 Before running the code, you should install the Spark and configure the environment.
 
+---
+
 ## Code
 
 The code for this project is in the "src" file
