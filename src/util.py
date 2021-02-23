@@ -116,7 +116,6 @@ class LassoSolver(object):
                     break
                 else:
                     x_k_old = x_k.copy()  # 深拷贝
-                    print(x_k)
                     k += 1
             x_optm = x_k
         elif self.method == "SubGD":
