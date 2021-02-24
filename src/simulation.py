@@ -17,7 +17,7 @@ os.environ["PYSPARK_PYTHON"] = "/home/lizhe/anaconda3/envs/pyspark/bin/python3.7
 os.environ["PYSPARK_DRIVER_PYTHON"] = "/home/lizhe/anaconda3/envs/pyspark/bin/python3.7"
 
 if __name__ == '__main__':
-    flag = 1
+    flag = 0
     # shrinkage parameter
     if flag:
         beta = [3, 0, 2, 1.5, 0, 4, 1, 0]
@@ -102,7 +102,7 @@ if __name__ == '__main__':
         print(rmse_mat)
 
     # worker num
-    flag = 1
+    flag = 0
     if flag:
         beta = [3, 2, 1.5, 4, 1]
         conf = SparkConf().setAppName("LinearRegression_Test").setMaster("local[*]")

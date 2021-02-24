@@ -98,7 +98,7 @@ class LassoSolver(object):
         n = x_mat.shape[0]
         y = y.reshape(n, 1)
         dim = x_mat.shape[1]
-        inverse_covariance_mat = x_mat.T @ x_mat
+        inverse_covariance_mat = x_mat.T.dot(x_mat)
         alpha = self.step_size  # 固定步长
         p = self.alpha  # 正则化参数
         epsilon = self.tol  # 最大允许误差
@@ -237,121 +237,17 @@ class DlsaLasso(LassoSolver):
         worker_df = self.distributed_linear_regression(RDD)
         num_in_worker_list = worker_df[0].tolist()
         total_num = sum(num_in_worker_list)
-        self.sample_size = total_num
         theta_list = worker_df[1].tolist()
         sigma_inv_list = worker_df[2].tolist()
         worker_num = len(theta_list)
         num_of_variable = len(theta_list[0])
         sigma_inv = np.zeros((num_of_variable, num_of_variable))
-        sigma_inv_sum = np.zeros((num_of_variable, num_of_variable))
         sig_theta = np.zeros((num_of_variable, 1))
-        variable_selection_mat = np.zeros((num_of_variable, worker_num))
         for i in range(worker_num):
             alpha = num_in_worker_list[i] / total_num
             sigma_k = sigma_inv_list[i]
             theta_k = theta_list[i].reshape(num_of_variable, 1)
-            variable_selection_mat[:, i] = theta_k.flatten()
-            sigma_inv_sum = sigma_inv_sum + sigma_k
             sigma_inv = sigma_inv + alpha * sigma_k
-            sig_theta = sig_theta + alpha * np.dot(sigma_k, theta_k)
-        theta_wlse = np.dot(np.linalg.inv(sigma_inv), sig_theta).reshape(-1, )
-        # variable selection
-        for i in range(num_of_variable):
-            if not np.sum(variable_selection_mat[i]):
-                theta_wlse[i] = 0
-        self.theta_init = theta_wlse
+            sig_theta = sig_theta + alpha * sigma_k.dot(theta_k)
+        theta_wlse = np.linalg.inv(sigma_inv).dot(sig_theta).reshape(-1, )
         return theta_wlse
-
-
-class DlsaLinearRegression(object):
-    """
-    :Perform linear regression in a distributed manner.
-    :Note: The DLSA algorithm used here can be found in the reference below.
-    :Reference: Xuening Zhu, Feng Li, Hansheng Wang
-    :"Least Squares Approximation for a Distributed System", arXiv:1908.04904v2
-    """
-    def __init__(self):
-        """
-        :param index_x_mat: the column index of independent variables used in the model;
-        :param index_y: the column index of dependent variable used in the model;
-        :param fit_intercept: If True, the intercept will be considered.
-        :param theta_init: the initial value of theta;
-        :param sample_size: the sample size of the data;
-        :param rounds: rounds of TDLSA.
-        """
-        self.index_x_mat = None
-        self.index_y = None
-        self.fit_intercept = None
-
-    def linear_regression(self, x_mat, y):
-        """
-        :param x_mat: the matrix of independent variables;
-        :param y: the dependent variable;
-        :param fit_intercept: If True, the intercept will be considered;
-        :return: a list of
-            * n: the sample size;
-            * theta_hat: the estimation of coefficients;
-            * inverse_covariance_mat: the inverse covariance matrix.
-        """
-        n = x_mat.shape[0]
-        if self.fit_intercept == None:
-            fit_intercept = True
-        else:
-            fit_intercept = self.fit_intercept
-        if fit_intercept:
-            x_mat = np.concatenate((np.ones(n).reshape(-1, 1), x_mat), axis=1)
-            index_tmp = copy(self.index_x_mat)
-            self.index_x_mat = np.append(0, index_tmp + 1)
-            self.index_y = self.index_y + 1
-        inverse_covariance_mat = x_mat.T @ x_mat
-        xt_x_inv = np.linalg.inv(inverse_covariance_mat)
-        theta_hat = xt_x_inv @ x_mat.T @ y
-        return n, theta_hat, inverse_covariance_mat
-
-    def linear_iter_function(self, iterator):
-        """
-        :param iterator: iterator of partitions in the RDD;
-        :return: a list of
-            * n_k: the sample size in the partition;
-            * theta_hat_k: the estimation of coefficients obtained from the partition;
-            * inverse_covariance_mat_k: the inverse covariance matrix obtained from the partition.
-        """
-        dat_iter = np.array([*iterator])
-        x_mat_k = dat_iter[:, self.index_x_mat]
-        y_k = dat_iter[:, self.index_y]
-        n_k, theta_hat_k, inverse_covariance_mat_k = self.linear_regression(x_mat = x_mat_k, y = y_k)
-        return n_k, theta_hat_k, inverse_covariance_mat_k
-
-    def distributed_linear_regression(self, RDD):
-        """
-        :param RDD: Resiliennt Distributed Datasets;
-        :return: a 3*k numpy array of n_k, theta_hat_k, inverse_covariance_mat_k in each partition.
-        """
-        output_worker = RDD.mapPartitions(self.linear_iter_function).collect()
-        result_worker = np.array(output_worker).reshape(-1, 3).T
-        return result_worker
-
-    def dlsa(self, RDD):
-        """
-        """
-        worker_df = self.distributed_linear_regression(RDD)
-        num_in_worker_list = worker_df[0].tolist()
-        total_num = sum(num_in_worker_list)
-        self.sample_size = total_num
-        theta_list = worker_df[1].tolist()
-        sigma_inv_list = worker_df[2].tolist()
-        worker_num = len(theta_list)
-        num_of_variable = len(theta_list[0])
-        sigma_inv = np.zeros((num_of_variable, num_of_variable))
-        sigma_inv_sum = np.zeros((num_of_variable, num_of_variable))
-        sig_theta = np.zeros((num_of_variable, 1))
-        for i in range(worker_num):
-            alpha = num_in_worker_list[i] / total_num
-            sigma_k = sigma_inv_list[i]
-            theta_k = theta_list[i].reshape(num_of_variable, 1)
-            sigma_inv_sum = sigma_inv_sum + sigma_k
-            sigma_inv = sigma_inv + alpha * sigma_k
-            sig_theta = sig_theta + alpha * np.dot(sigma_k, theta_k)
-        theta_wlse = np.dot(np.linalg.inv(sigma_inv), sig_theta).reshape(-1,)
-        self.theta_init = theta_wlse
-        return theta_wlse, sigma_inv_sum
