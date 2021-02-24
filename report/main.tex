@@ -78,7 +78,7 @@ In this work, we develop a distributed lasso regression approximation (\textbf{D
 To handle the problem, we distribute the dataset on different worker servers.
 An traditional optimization algorithm (PGM, ADMM, Subgradient descent) is first conducted on each worker to get the local estimator. 
 After that, the informations on each worker are then broadcasted to master to obtain a combined estimator by taking a weighted average of local estimators. The proposed distributed algorithm has three merits. 
-First, the communication cost is low since it requires only one round of communication. Second, no further iterative algorithm is needed on master and hence it does not suffer from problems as initialization and non-robustness. Third, the computational complexity is much lower compared to get the global estimator using whole dataset. The code of the project can be found in ({\href{www.github.com/Ikerlz/dlra}{ www.github.com/Ikerlz/dlra}}). Theoretical properties are provided with respect to the estimation consistency. Lastly, the advantages of the proposed methodology are illustrated by experiments on a variety of synthetic and empirical datasets.
+First, the communication cost is low since it requires only one round of communication. Second, no further iterative algorithm is needed on master and hence it does not suffer from problems as initialization and non-robustness. Third, the computational complexity is much lower compared to get the global estimator using whole dataset. The code of the project can be found in ({\href{www.github.com/Ikerlz/dlra}{www.github.com/Ikerlz/DLR}}). Theoretical properties are provided with respect to the estimation consistency. Lastly, the advantages of the proposed methodology are illustrated by experiments on a variety of synthetic and empirical datasets.
 \keywords{Lasso; Distributed system; Optimization algorithm}
 \end{abstract}
 
@@ -133,21 +133,24 @@ Proximal gradient methods are a generalized form of projection used to solve non
 \begin{equation}
     \min_{\beta} f(\beta)=g(\beta)+h(\beta)
 \end{equation}
-where $g(\beta) = \frac{1}{2N}\|y - X^{\top}\beta\|_{2}^{2}$ and $h(\beta) = \lambda\| \beta\|_1$. Since $h(\beta)$ is closed and convex function, then we can define the proximal mapping as follows:
+where $g(\beta) = \frac{1}{2N}\|y - X \beta\|_{2}^{2}$ and $h(\beta) = \lambda\| \beta\|_1$. Since $h(\beta)$ is closed and convex function, then we can define the proximal mapping as follows:
 
 \begin{definition}\label{def:prox}
 Suppose $h$ is a closed and convex function. The proximal mapping (prox-operator)
 of $h$ is defined as
-\end{definition}
-
 \begin{equation}
-\operatorname{prox}_{h}(x)=\underset{u}{\operatorname{argmin}}\left(h(u)+\frac{1}{2}\|u-x\|^{2}\right)
+\operatorname{prox}_{h}(x)=\underset{u}{\operatorname{argmin}}(h(u)+\frac{1}{2}\|u-x\|^{2})
 \end{equation}
-Following the definition \ref{def:prox}, the proximal mapping for $h(]beta) = \|\beta \|_1$ can be written as
-\begin{equation}\label{equ:prox_lasso}
-    \operatorname{prox}_{h}(\beta) = \operatorname{sign}(\beta) \max \left\{|\beta|-\lambda, 0\right\}
+\end{definition}
+\noindent
+Following the definition \ref{def:prox} and $g^{\prime}(\beta) = -\frac{1}{N}X^{\top}(y - X\beta)$, the updating equation can be written as 
+\begin{equation}\label{equ:pgm_update}
+    \begin{aligned}
+    \beta_{k+1} &= \operatorname{prox}_{\alpha h}\left(\beta_k - \alpha \cdot g^{\prime}(\beta_k) \right) \\
+    &= \operatorname{sign}(\beta_k - \alpha \cdot g^{\prime}(\beta_k)) \max \left\{|\beta_k - \alpha \cdot g^{\prime}(\beta_k)|-\alpha \lambda, 0\right\}
+    \end{aligned}
 \end{equation}
-Thus, the Proximal Gradient Descent of Lasso regression is summarized in Algorithm \ref{algo:pgd_lasso}.
+The Proximal Gradient Descent of Lasso regression is summarized in Algorithm \ref{algo:pgd_lasso}.
 
 \begin{center}
 \begin{minipage}{13.5cm}
@@ -155,12 +158,12 @@ Thus, the Proximal Gradient Descent of Lasso regression is summarized in Algorit
   \caption{Proximal gradient descent of Lasso regression.}\label{algo:pgd_lasso}
   \begin{algorithmic}[1]
     \Require
-      Dataset $Z = (X^{\top}, y)^{\top} \in \mbR^{(p+1) \times N}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size); tolerance $\epsilon$; initial point $\beta_0$
+      Dataset $Z = (X, y) \in \mbR^{N \times (p+1)}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size); tolerance $\epsilon$; initial point $\beta_0$
     \Ensure Estimation of $\beta$: $\hat{\beta}$
     \For {$k=0,1,2,\ldots$}
     {
-    \State update $x_{k+1}= \operatorname{prox}_{\alpha h}(\beta) = \operatorname{sign}(\beta) \max \left\{|\beta|-\alpha \lambda, 0\right\}$ \quad (\ref{equ:prox_lasso})
-    \If{$\|x_{k+1}-x_{k} \|_2 < \epsilon$}
+    \State update $\beta_{k+1} = \operatorname{sign}(\beta_k - \alpha \cdot g^{\prime}(\beta_k)) \max \left\{|\beta_k - \alpha \cdot g^{\prime}(\beta_k)|-\alpha \lambda, 0\right\}$ \quad (\ref{equ:pgm_update})
+    \If{$\|\beta_{k+1}-\beta_{k} \|_2 < \epsilon$}
     \State stop
     \EndIf
     }
@@ -196,13 +199,13 @@ Since the $\operatorname{sign}(\beta) \in \partial \|\beta \|_1$, the descent di
   \caption{Subgradient descent of Lasso regression.}\label{algo:sgd_lasso}
   \begin{algorithmic}[1]
     \Require
-      Dataset $Z = (X^{\top}, y)^{\top} \in \mbR^{(p+1) \times N}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size); tolerance $\epsilon$; initial point $\beta_0$
+      Dataset $Z = (X, y) \in \mbR^{N \times (p+1)}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size); tolerance $\epsilon$; initial point $\beta_0$
     \Ensure Estimation of $\beta$: $\hat{\beta}$
     \For {$k=0,1,2,\ldots$}
     {
     \State update $d^{k+1} = -\left(\frac{1}{N}X(X^{\top}\beta_k-y)+\lambda \cdot \operatorname{sign}(\beta)\right)$ \quad (\ref{equ:sgd_update})
-    \State update $x_{k+1}= x_k - \alpha \cdot d^{k+1}$
-    \If{$\|x_{k+1}-x_{k} \|_2 < \epsilon$}
+    \State update $\beta_{k+1}= \beta_k - \alpha \cdot d^{k+1}$
+    \If{$\|\beta_{k+1}-\beta_{k} \|_2 < \epsilon$}
     \State stop
     \EndIf
     }
@@ -251,7 +254,7 @@ The ADMM algorithm is summarized in Algorithm \ref{algo:admm_lasso}.
   \caption{ADMM of Lasso regression.}\label{algo:admm_lasso}
   \begin{algorithmic}[1]
     \Require
-      Dataset $Z = (X^{\top}, y)^{\top} \in \mbR^{(p+1) \times N}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size);lagrange parameter $\sigma$; tolerance $\epsilon$; initial point $\beta_0$
+      Dataset $Z = (X, y) \in \mbR^{N \times (p+1)}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size);lagrange parameter $\sigma$; tolerance $\epsilon$; initial point $\beta_0$
     \Ensure Estimation of $\beta$: $\hat{\beta}$
     \State Initialize $z$ and $u$
     \For {$k=0,1,2,\ldots$}
@@ -259,7 +262,7 @@ The ADMM algorithm is summarized in Algorithm \ref{algo:admm_lasso}.
     \State update $\beta^{k+1}=\left(X^{\top} X+\sigma N  I\right)^{-1}\left(X^{\top} y+\sigma N z^{k}- N u^{k}\right)$ \quad (\ref{equ:update_beta})
     \State update $z^{k+1}=\operatorname{prox}_{(\mu / \sigma)\|\cdot\|_{1}}\left({\beta}^{k+1}+u^{k} / \sigma\right)$ \quad (\ref{equ:update_z})
     \State update $u^{k+1}=u^{k}+\gamma \sigma\left({\beta}^{k+1}-z^{k+1}\right)$ \quad (\ref{equ:update_u})
-    \If{$\|x_{k+1}-x_{k} \|_2 < \epsilon$}
+    \If{$\|\beta_{k+1}-\beta_{k} \|_2 < \epsilon$}
     \State stop
     \EndIf
     }
@@ -288,7 +291,7 @@ After getting the local estimators on workers, we then broadcast the results to 
   \caption{Distributed Lasso Regression Algorithm.}\label{algo:dlr}
   \begin{algorithmic}[1]
     \Require
-      Dataset $Z = (X^{\top}, y)^{\top} \in \mbR^{(p+1) \times N}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size);number of workers $K$; tolerance $\epsilon$; initial point $\beta_0$
+      Dataset $Z = (X, y) \in \mbR^{N \times (p+1)}$;the shrinkage parameter $\lambda$;  the step size $\alpha$ (using constant step size);number of workers $K$; tolerance $\epsilon$; initial point $\beta_0$
     \Ensure Estimation of $\beta$: $\tilde{\beta}$
         \begin{itemize}
         \item [{\sc Step 1}] {\sc Lasso Regression on Worker}
@@ -437,7 +440,7 @@ To demonstrate our method, we set up a Spark-on-YARN cluster on three servers . 
 
 \subsection{The DLR Method}
 
-For the USEDCAR dataset, we perform our DLR algorithm on the Spark and finally get the results. Besides, we compare our result with the solver in \textbf{"sklearn"} package of \textbf{Python} and find that there is a big difference between them. This is due to the bad initial value, how to get a good initial value is an interesting problem and it will be discussed in the further study.
+For the USEDCAR dataset, we perform our DLR algorithm on the Spark and finally get the results. Besides, we compare our result with the solver in \textbf{"sklearn"} package of \textbf{Python} and the result is summarized as Table 1 in Appendix. We can see that there is a big difference between the traditional method in \textbf{"sklearn"} package with our DLR method. This is due to the bad initial value, how to get a good initial value is an interesting problem and it will be discussed in the further study.
 
 \section{CONCLUDING REMARKS}\label{sec:6}
 
@@ -451,6 +454,53 @@ To conclude the article, we provide several topics for future studies. First, be
 Thanks to Prof. Jiang for his teaching and guidance over the past semester. As a student of school of big data, this course gives us a very intuitive understanding of optimization algorithm. I believe the knowledge of this course will be of great help to our future research. At the same time,I would like to thank all the teaching assistants for correcting ours homework carefully and patiently answering our various questions, which has greatly helped our study of this course.
 
 \newpage
+
+\section*{Appendix: Result of U.S. USERCAR Dataset}\label{appendix}
+\addcontentsline{toc}{section}{Appendix: Result of U.S. USERCAR Dataset}
+
+\begin{table}[h]
+\label{table_res}
+\centering
+\begin{tabular}{c||c|c|c|c}
+\hline
+\hline
+\textbf{Variable Number} & \textbf{Sklearn} &  \textbf{PGM}    &   \textbf{ADMM} &  \textbf{Sub-GD} \\ 
+ \hline
+1 & 0.0000  & -0.0094 &  0.0000 & -0.0094 \\ 
+2 & 0.0797  & -0.0813 &  0.0794 &  0.0813 \\
+3 & -0.0086 & -0.0058 & -0.0090 & -0.0058 \\
+4 & 0.0647  &  0.0622 &  0.0645 &  0.0622 \\
+5 & 0.0000  & -0.0001 & -0.0004 & -0.0001 \\
+6 & 0.0776  &  0.0756 &  0.0773 &  0.0756 \\
+7 & 0.0517  &  0.0579 &  0.0580 &  0.0579 \\
+8 & -0.1813 & -0.1832 & -0.1812 & -0.1832 \\
+9 & 0.0039  &  0.0047 &  0.0044 &  0.0047 \\
+10 & 0.0112  &  0.0119 &  0.0111 &  0.0119 \\
+11 & 0.0011  &  0.0007 &  0.0006 &  0.0007 \\
+12 & 0.0077  &  0.0076 &  0.0077 &  0.0076 \\
+13 & 0.1259  &  0.3123 &  0.1260 &  0.3122 \\
+14 & 0.0000  &  0.0004 &  0.0000 &  0.0004 \\
+15 & 0.0058  &  0.0711 &  0.0000 &  0.0711 \\
+16 & 0.0000  & -0.0362 &  0.0000 & -0.0362 \\
+17 & -0.1849 & -0.1063 & -0.1875 & -0.1063 \\
+18 & 0.0000  &  0.0000 &  0.0000 &  0.0000 \\
+19 & 0.2311  &  0.0317 &  0.2261 &  0.0318 \\
+20 & 0.0000  &  0.0000 &  0.0000 &  0.0000 \\
+21 & 0.5992  &  0.2205 &  0.5791 &  0.2205 \\
+22 & 0.5056  &  0.2258 &  0.5017 &  0.2258 \\
+23 & 0.0000  & -0.0045 &  0.0000 & -0.0455 \\
+24 & 0.0000  &  0.0000 &  0.0000 &  0.0000 \\
+25 & 0.1418  &  0.2473 &  0.1597 &  0.2473 \\
+26 & -0.4704 & -0.1811 & -0.4592 & -0.1811 \\
+27 & 0.1414  &  0.1138 &  0.1403 &  0.1138 \\
+28 & 0.0121  &  0.0098 &  0.0118 &  0.0098 \\
+\hline
+\end{tabular}
+\caption{Coefficients for the logistic model estimated with three different DLR method (PGM, ADMM, Sub-GD) and the method in \textbf{"sklearn"} package}
+\end{table}
+
+\newpage
+
 \bibliographystyle{asa}
 \bibliography{reference}
 \addcontentsline{toc}{section}{References}
